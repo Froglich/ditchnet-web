@@ -6,8 +6,7 @@
 	"database_name": "postgres",
 	"listen_client": "127.0.0.1",
 	"listen_port": 5566,
-	"input_file_storage_path": "/tmp",
-	"output_file_storage_path": "/tmp",
+	"file_storage_path": "/tmp",
 	"script_path": "./script.py",
 	"assets_path": "assets",
 	"max_concurrent_jobs": 10

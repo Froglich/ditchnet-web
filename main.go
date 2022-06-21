@@ -28,18 +28,17 @@ const (
 )
 
 var ditchNetConfig struct {
-	DatabaseHost          string `json:"database_host"`
-	DatabasePort          uint   `json:"database_port"`
-	DatabaseUsername      string `json:"database_username"`
-	DatabasePassword      string `json:"database_password"`
-	DatabaseName          string `json:"database_name"`
-	InputFileStoragePath  string `json:"input_file_storage_path"`
-	OutputFileStoragePath string `json:"output_file_storage_path"`
-	ListenClient          string `json:"listen_client"`
-	ListenPort            uint   `json:"listen_port"`
-	ScriptPath            string `json:"script_path"`
-	AssetsPath            string `json:"assets_path"`
-	MaxConcurrentJobs     uint   `json:"max_concurrent_jobs"`
+	DatabaseHost      string `json:"database_host"`
+	DatabasePort      uint   `json:"database_port"`
+	DatabaseUsername  string `json:"database_username"`
+	DatabasePassword  string `json:"database_password"`
+	DatabaseName      string `json:"database_name"`
+	FileStoragePath   string `json:"file_storage_path"`
+	ListenClient      string `json:"listen_client"`
+	ListenPort        uint   `json:"listen_port"`
+	ScriptPath        string `json:"script_path"`
+	AssetsPath        string `json:"assets_path"`
+	MaxConcurrentJobs uint   `json:"max_concurrent_jobs"`
 }
 
 type ditchNetState struct {
@@ -73,12 +72,28 @@ func (dnj ditchNetJob) getPositionInQueue(db *sql.DB) (*uint, error) {
 	return &pos, nil
 }
 
+func (dnj ditchNetJob) getFolder() string {
+	return path.Join(ditchNetConfig.FileStoragePath, string(dnj))
+}
+
+func (dnj ditchNetJob) getInFolderPath() string {
+	return path.Join(dnj.getFolder(), "input")
+}
+
 func (dnj ditchNetJob) getInFilePath() string {
-	return path.Join(ditchNetConfig.InputFileStoragePath, fmt.Sprintf("%s.tiff", dnj))
+	return path.Join(dnj.getInFolderPath(), fmt.Sprintf("%s.tiff", dnj))
+}
+
+func (dnj ditchNetJob) getOutFolderPath() string {
+	return path.Join(dnj.getFolder(), "output")
 }
 
 func (dnj ditchNetJob) getOutFilePath() string {
-	return path.Join(ditchNetConfig.OutputFileStoragePath, fmt.Sprintf("%s_processed.tiff", dnj))
+	return path.Join(dnj.getOutFolderPath(), fmt.Sprintf("%s.tiff", dnj))
+}
+
+func (dnj ditchNetJob) getTempFolderPath() string {
+	return path.Join(dnj.getFolder(), "temp")
 }
 
 func (dnj ditchNetJob) setState(db *sql.DB, state uint) {
@@ -166,14 +181,10 @@ func cleanerRoutine() {
 			}
 
 			log.Printf("purging job %s", job)
-			err := os.Remove(job.getInFilePath())
-			if err != nil && !os.IsNotExist(err) {
-				log.Printf("unable to delete input-file: '%v'\n", err)
-			}
 
-			err = os.Remove(job.getOutFilePath())
+			err = os.RemoveAll(job.getFolder())
 			if err != nil && !os.IsNotExist(err) {
-				log.Printf("unable to delete output-file: '%v'\n", err)
+				log.Printf("unable to delete job files: '%v'\n", err)
 			}
 
 			_, err = db.Exec("DELETE FROM jobs WHERE job_id = $1", job)
@@ -265,6 +276,24 @@ func newJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}*/
 
+	err = os.MkdirAll(job.getInFolderPath(), 0644)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Panic(err)
+	}
+
+	err = os.MkdirAll(job.getOutFolderPath(), 0644)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Panic(err)
+	}
+
+	err = os.MkdirAll(job.getTempFolderPath(), 0644)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Panic(err)
+	}
+
 	filename := job.getInFilePath()
 	nf, err := os.Create(filename)
 	if err != nil {
@@ -326,6 +355,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", indexHandler).Methods("GET")
 	r.HandleFunc("/job", newJobHandler).Methods("POST")
+	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}", nil).Methods("GET")
 	r.PathPrefix("/assets").Handler(http.StripPrefix("/assets", http.FileServer(http.Dir(path.Join(ditchNetConfig.AssetsPath, "assets")))))
 
 	go jobQueueRoutine()
