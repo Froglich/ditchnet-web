@@ -100,6 +100,17 @@ func (dnj ditchNetJob) setState(db *sql.DB, state uint) {
 	db.Exec("UPDATE jobs SET state = $1, changed = NOW() WHERE job_id = $2", state, dnj)
 }
 
+func (dnj ditchNetJob) getModel(db *sql.DB) uint {
+	row := db.QueryRow("SELECT model FROM jobs WHERE job_id = $1", dnj)
+	var model uint
+	if err := row.Scan(&model); err != nil {
+		log.Printf("could not get model for job %s from db: '%v'\n", dnj, err)
+		return 1
+	}
+
+	return model
+}
+
 func (dnj ditchNetJob) start() {
 	db := getDBConnection()
 	defer db.Close()
@@ -107,10 +118,14 @@ func (dnj ditchNetJob) start() {
 	log.Printf("starting job %s\n", dnj)
 	dnj.setState(db, Processing)
 
-	inFile := dnj.getInFilePath()
-	outFile := dnj.getOutFilePath()
+	var modelPath string
+	if dnj.getModel(db) == 1 {
+		modelPath = "/min/modell/DitchNet_05m.h5"
+	} else {
+		modelPath = "/min/modell/DitchNet_1m.h5"
+	}
 
-	cmd := exec.Command("/usr/bin/python3", ditchNetConfig.ScriptPath, inFile, outFile)
+	cmd := exec.Command("/usr/bin/python", ditchNetConfig.ScriptPath, dnj.getInFolderPath(), dnj.getOutFolderPath(), fmt.Sprintf("--temp-dir=%s", dnj.getTempFolderPath()), fmt.Sprintf("--model=%s", modelPath))
 	err := cmd.Run()
 	if err != nil {
 		dnj.setState(db, Error)
