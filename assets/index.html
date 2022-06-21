@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>DitchNet</title>
+		<meta name="description" content="Demonstration of DitchNet">
+		<meta name="author" content="Kim Lindgren">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<meta name="theme-color" content="#648349"/>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+
+		<link rel="stylesheet" href="/assets/stylesheets/interface.css">
+		<link rel="stylesheet" href="/assets/stylesheets/fancydialog.css">
+		<link rel="stylesheet" href="/assets/fonts/metropolis/fonts.css">
+		<style>
+			:root {
+				--fg: #ECEFF4;
+				--fg-alt1: #EDD096;
+				--fg-alt2: #EAC885;
+				--fg-alt3: #E7C173;
+				--bg1: #333B47;
+				--bg2: #2B313B;
+				--bg3: #22272F;
+				--bg-alt1: #6E9051;
+				--bg-alt2: #648349;
+				--bg-alt3: #5A7642;
+				--bg-alt4: #BE6069;
+				--bg-alt5: #B8515B;
+				--bg-alt6: #AE4751;
+			}
+
+			html {
+				box-sizing: border-box;
+				font-family: 'Metropolis', sans-serif;
+				background-color: var(--bg2);
+				color: var(--fg);
+			}
+
+			*, *::before, *::after {
+				box-sizing: inherit;
+			}
+
+			main {
+				max-width: 600px;
+				padding: 10px;
+				margin: 20px auto 20px auto;
+				text-align: center;
+				animation: fade-in 1s;
+			}
+
+			#main-content {
+				position: relative;
+				width: 100%;
+				padding: 10px;
+				background-color: var(--bg1);
+				box-shadow: 0px 2px 4px var(--bg3), 0px 4px 8px var(--bg3);
+				border-radius: 8px;
+				text-align: left;
+			}
+
+			#main-content #info-frame {
+				position: absolute;
+				top: 0px;
+				left: 0px;
+				width: 100%;
+				height: 100%;
+
+
+			}
+
+			label.title {
+				font-weight: bold;
+			}
+
+			@keyframes fade-in {
+				0% {
+					transform: translateY(25%);
+					opacity: 0;
+				} 100% {
+					transform: translateY(0%);
+					opacity: 1;
+				}
+			}
+		</style>
+
+		<script src="/assets/scripts/fancydialog.js"></script>
+		<script src="/assets/scripts/request.js"></script>
+	</head>
+	<body>
+		<main>
+			<h1>DitchNet</h1>
+			<form id="main-content" action="javascript:submitRaster()">
+				<h2 style="margin-top: 0px">Upload raster</h2>
+				<p>Upload your own .tiff-file and have DitchNet find and classify all ditches.</p>
+				
+				<label class="title" for="inFile">Pick a file</label>
+				<label class="filelbl" style="margin-bottom: 10px">
+					<span id="lblFilename">No file selected</span>
+					<input type="file" id="inFile" accept="image/tiff">
+				</label>
+
+				<label class="title" for="selModel">Pixel resolution</label>
+				<select id="selModel" style="width: 100%; margin-bottom: 10px">
+					<option value="1">0.5m²</option>
+					<option value="2">1m²</option>
+				</select>
+
+				<div style="display: flex; flex-direction: row-reverse;">
+					<input type="submit" id="btnSubmit" value="Go!" disabled>
+				</div>
+			</form>
+		</main>
+
+		<script>
+			let currentJob = null;
+			let jobState = null;
+			let selectedFile = null;
+			let inFile = document.querySelector('#inFile');
+			let selModel = document.querySelector('#selModel');
+			let lblFilename = document.querySelector('#lblFilename');
+			let btnSubmit = document.querySelector('#btnSubmit');
+
+			inFile.addEventListener('change', (e) => {
+				if(e.target.files.length < 1) return
+
+				selectedFile = e.target.files[0];
+				setFileLabelText(selectedFile.name)
+				localStorage.setItem('filename', selectedFile.name);
+				btnSubmit.removeAttribute('disabled');
+			});
+
+			function setFileLabelText(txt) {
+				lblFilename.innerHTML = txt;
+			}
+
+			function submitRaster() {
+				let df = new FormData();
+
+				df.append('model', selModel.value);
+				df.append('input', selectedFile);
+
+				new Request('/job')
+					.setContentType(null)
+					.onSuccess((data) => {
+						console.log(data);
+					})
+					.onError((status, msg) => {
+						fancyAlert('Error', `${formatStatusCode(status)} - ${msg}`)
+					})
+					.POST(df)
+			}
+		</script>
+	</body>
+</html>
