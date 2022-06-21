@@ -125,7 +125,7 @@ func (dnj ditchNetJob) start() {
 		modelPath = "/min/modell/DitchNet_1m.h5"
 	}
 
-	cmd := exec.Command("/usr/bin/python", ditchNetConfig.ScriptPath, dnj.getInFolderPath(), dnj.getOutFolderPath(), fmt.Sprintf("--temp-dir=%s", dnj.getTempFolderPath()), fmt.Sprintf("--model=%s", modelPath))
+	cmd := exec.Command("python", ditchNetConfig.ScriptPath, dnj.getInFolderPath(), dnj.getOutFolderPath(), fmt.Sprintf("--temp-dir=%s", dnj.getTempFolderPath()), fmt.Sprintf("--model=%s", modelPath))
 	err := cmd.Run()
 	if err != nil {
 		dnj.setState(db, Error)
