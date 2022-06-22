@@ -307,19 +307,19 @@ func newJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}*/
 
-	err = os.MkdirAll(job.getInFolderPath(), 0644)
+	err = os.MkdirAll(job.getInFolderPath(), 0755)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Panic(err)
 	}
 
-	err = os.MkdirAll(job.getOutFolderPath(), 0644)
+	err = os.MkdirAll(job.getOutFolderPath(), 0755)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Panic(err)
 	}
 
-	err = os.MkdirAll(job.getTempFolderPath(), 0644)
+	err = os.MkdirAll(job.getTempFolderPath(), 0755)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Panic(err)
