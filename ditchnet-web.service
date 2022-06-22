@@ -1,0 +1,12 @@
+[Unit]
+Description = DitchNet Web
+After = network.target
+
+[Service]
+Type = simple
+WorkingDirectory = /opt/ditchnet-web
+ExecStart = /opt/ditchnet-web/ditchnet-web /opt/ditchnet-web/config.json
+Restart = on-failure
+
+[Install]
+WantedBy = multi-user.target
