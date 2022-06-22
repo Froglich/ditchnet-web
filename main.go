@@ -81,7 +81,7 @@ func (dnj ditchNetJob) getInFolderPath() string {
 }
 
 func (dnj ditchNetJob) getInFilePath() string {
-	return path.Join(dnj.getInFolderPath(), fmt.Sprintf("%s.tiff", dnj))
+	return path.Join(dnj.getInFolderPath(), fmt.Sprintf("%s.tif", dnj))
 }
 
 func (dnj ditchNetJob) getOutFolderPath() string {
@@ -89,7 +89,7 @@ func (dnj ditchNetJob) getOutFolderPath() string {
 }
 
 func (dnj ditchNetJob) getOutFilePath() string {
-	return path.Join(dnj.getOutFolderPath(), fmt.Sprintf("%s.tiff", dnj))
+	return path.Join(dnj.getOutFolderPath(), fmt.Sprintf("%s.tif", dnj))
 }
 
 func (dnj ditchNetJob) getTempFolderPath() string {
