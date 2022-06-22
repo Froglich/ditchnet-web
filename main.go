@@ -29,26 +29,17 @@ const (
 )
 
 var ditchNetConfig struct {
-	DatabaseHost      string `json:"database_host"`
-	DatabasePort      uint   `json:"database_port"`
-	DatabaseUsername  string `json:"database_username"`
-	DatabasePassword  string `json:"database_password"`
-	DatabaseName      string `json:"database_name"`
-	FileStoragePath   string `json:"file_storage_path"`
-	ListenClient      string `json:"listen_client"`
-	ListenPort        uint   `json:"listen_port"`
-	ScriptPath        string `json:"script_path"`
-	AssetsPath        string `json:"assets_path"`
-	MaxConcurrentJobs uint   `json:"max_concurrent_jobs"`
-}
-
-type ditchNetState struct {
-	State   uint
-	Message string
-}
-
-func (dns ditchNetState) toJSON() []byte {
-	return []byte(fmt.Sprintf(`{"state_id": %d, "message": "%s"}`, dns.State, dns.Message))
+	DatabaseHost      string        `json:"database_host"`
+	DatabasePort      uint          `json:"database_port"`
+	DatabaseUsername  string        `json:"database_username"`
+	DatabasePassword  string        `json:"database_password"`
+	DatabaseName      string        `json:"database_name"`
+	FileStoragePath   string        `json:"file_storage_path"`
+	ListenClient      string        `json:"listen_client"`
+	ListenPort        uint          `json:"listen_port"`
+	JobTimeoutMin     time.Duration `json:"job_timeout_min"`
+	AssetsPath        string        `json:"assets_path"`
+	MaxConcurrentJobs uint          `json:"max_concurrent_jobs"`
 }
 
 type ditchNetJob string
@@ -120,16 +111,15 @@ func (dnj ditchNetJob) getStateAndMessage(db *sql.DB) (uint, string) {
 			return InQueue, "position in queue is unknown"
 		}
 
-		msg = fmt.Sprintf("position in queue: %d", pos)
-	}
-
-	switch state {
-	case Processing:
+		msg = fmt.Sprintf("position in queue: %d", *pos)
+	} else if state == Processing {
 		msg = "processing"
-	case Complete:
+	} else if state == Complete {
 		msg = "complete"
-	default:
+	} else if state == Error {
 		msg = "failed"
+	} else {
+		msg = "unknown state"
 	}
 
 	return state, msg
@@ -179,7 +169,19 @@ func (dnj ditchNetJob) start() {
 		"--temp_dir=/min/temp_dir/",
 		fmt.Sprintf("--model=%s", modelPath),
 	)
+	running := true
+	go func() {
+		time.Sleep(ditchNetConfig.JobTimeoutMin * time.Minute)
+		if running {
+			log.Printf("job %s is taking too long\n", dnj)
+			err := cmd.Process.Kill()
+			if err != nil {
+				log.Printf("failed to kill job %s: '%v'\n", dnj, err)
+			}
+		}
+	}()
 	out, err := cmd.CombinedOutput()
+	running = false
 	if err != nil {
 		log.Printf("job %s closed with error: '%v'\n", dnj, err)
 	}
@@ -384,7 +386,7 @@ func getJobStateHandler(w http.ResponseWriter, r *http.Request) {
 	var job ditchNetJob = ditchNetJob(mux.Vars(r)["job"])
 	state, msg := job.getStateAndMessage(db)
 
-	fmt.Fprintf(w, `{"state_id": %d, "message: "%s"}`, state, msg)
+	fmt.Fprintf(w, `{"state_id": %d, "message": "%s"}`, state, msg)
 }
 
 func getJobOutput(w http.ResponseWriter, r *http.Request) {
@@ -452,8 +454,8 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", indexHandler).Methods("GET")
 	r.HandleFunc("/job", newJobHandler).Methods("POST")
-	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}", getJobStateHandler).Methods("GET")
-	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}/download", getJobOutput).Methods("GET")
+	r.HandleFunc("/job/{job:[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12}}", getJobStateHandler).Methods("GET")
+	r.HandleFunc("/job/{job:[a-zA-Z0-9]{8}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{12}}/download", getJobOutput).Methods("GET")
 	r.PathPrefix("/assets").Handler(http.StripPrefix("/assets", http.FileServer(http.Dir(path.Join(ditchNetConfig.AssetsPath, "assets")))))
 
 	go jobQueueRoutine()

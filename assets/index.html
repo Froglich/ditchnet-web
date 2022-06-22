@@ -58,14 +58,42 @@
 				text-align: left;
 			}
 
-			#main-content #info-frame {
+			#info-frame {
 				position: absolute;
+				z-index: 100;
 				top: 0px;
 				left: 0px;
 				width: 100%;
 				height: 100%;
+				padding: 10px;
+				color: var(--fg-alt1);
+				text-align: center;
+				background-color: rgba(0,0,0,0);
+				pointer-events: none;
+				opacity: 0;
+				transition: background-color 0.2s;
+			}
+			
+			#info-frame a {
+				color: var(--fg);
+			}
+			
+			#info-frame.visible {
+				opacity: 1;
+				background-color: rgba(0,0,0,0.8);
+				pointer-events: auto;
+			}
 
-
+			#info-frame.visible.processing::before {
+				content: '';
+				display: block;
+				position: absolute;
+				height: 16px;
+				width: 16px;
+				bottom: 40px;
+				left: 50%;
+				margin-left: -8px;
+				animation: cube-roll 3s infinite linear;
 			}
 
 			label.title {
@@ -81,6 +109,37 @@
 					opacity: 1;
 				}
 			}
+
+			@keyframes cube-roll {
+				0% {
+					background-color: var(--bg-alt1);
+					transform-origin: bottom left;
+					transform: translate(0px, -16px) rotate(0deg);
+				} 25% {
+					transform-origin: bottom left;
+					transform: translate(0px, -16px) rotate(-180deg);
+				} 26% {
+					transform-origin: top left;
+					transform: translate(0px, 16px) rotate(-180deg);
+				} 50% {
+					background-color: var(--bg-alt4);
+					transform-origin: top left;
+					transform: translate(0px, 16px) rotate(-360deg);
+				} 51% {
+					transform-origin: top right;
+					transform: translate(0px, 16px) rotate(-360deg);
+				} 75% {
+					transform-origin: top right;
+					transform: translate(0px, 16px) rotate(-540deg);
+				} 76% {
+					transform-origin: bottom right;
+					transform: translate(0px, -16px) rotate(-540deg);
+				} 100% {
+					background-color: var(--bg-alt1);
+					transform-origin: bottom right;
+					transform: translate(0px, -16px) rotate(-720deg);
+				}
+			}
 		</style>
 
 		<script src="/assets/scripts/fancydialog.js"></script>
@@ -90,6 +149,7 @@
 		<main>
 			<h1>DitchNet</h1>
 			<form id="main-content" action="javascript:submitRaster()">
+				<div id="info-frame"></div>
 				<h2 style="margin-top: 0px">Upload raster</h2>
 				<p>Upload your own .tiff-file and have DitchNet find and classify all ditches.</p>
 				
@@ -112,6 +172,12 @@
 		</main>
 
 		<script>
+			const inQueue = 0;
+			const processing = 1;
+			const complete = 2;
+			const error = 3;
+			const notFound = 4;
+
 			let currentJob = null;
 			let jobState = null;
 			let selectedFile = null;
@@ -119,6 +185,7 @@
 			let selModel = document.querySelector('#selModel');
 			let lblFilename = document.querySelector('#lblFilename');
 			let btnSubmit = document.querySelector('#btnSubmit');
+			let infoFrame = document.querySelector('#info-frame');
 
 			inFile.addEventListener('change', (e) => {
 				if(e.target.files.length < 1) return
@@ -133,21 +200,77 @@
 				lblFilename.innerHTML = txt;
 			}
 
+			function updateJobInfo() {
+				infoFrame.setAttribute('class', 'visible processing');
+
+				new Request(`/job/${currentJob}`)
+					.onSuccessJSON((data) => {
+						switch(data.state_id) {
+							case inQueue:
+								infoFrame.innerHTML = `<h3>In queue</h3>${data.message}...`;
+								window.setTimeout(updateJobInfo, 5000);
+								break;
+							case processing:
+								infoFrame.innerHTML = `<h3>Currently Processing</h3>`;
+								window.setTimeout(updateJobInfo, 5000);
+								break;
+							case complete:
+								infoFrame.innerHTML = `<h3>Complete!</h3><a href="/job/${currentJob}/download">download result</a>`;
+								infoFrame.setAttribute('class', 'visible');
+								localStorage.removeItem('current_job');
+								break;
+							case error:
+								infoFrame.innerHTML = `Job failed.`;
+								infoFrame.setAttribute('class', 'visible');
+								localStorage.removeItem('current_job');
+								break;
+							case notFound:
+								infoFrame.removeAttribute('class');
+								break;
+						}
+					})
+					.onError((status, msg) => {
+						localStorage.removeItem('current_job');
+						infoFrame.removeAttribute('class');
+						fancyAlert('Error', `${formatStatusCode(status)} - ${msg}`)
+					})
+					.GET()
+			}
+
+			function initializeInterval(jobID) {
+				let i = window.setInterval(() => {
+
+				}, 5000);
+			}
+
 			function submitRaster() {
 				let df = new FormData();
 
 				df.append('model', selModel.value);
 				df.append('input', selectedFile);
 
+				infoFrame.setAttribute('class', 'visible processing');
+				infoFrame.innerHTML = '<h3>Uploading...</h3>';
+
 				new Request('/job')
 					.setContentType(null)
 					.onSuccess((data) => {
-						console.log(data);
+						currentJob = data;
+						localStorage.setItem('current_job', data);
+						updateJobInfo();
 					})
 					.onError((status, msg) => {
+						infoFrame.removeAttribute('class');
 						fancyAlert('Error', `${formatStatusCode(status)} - ${msg}`)
 					})
 					.POST(df)
+			}
+
+			let ej = localStorage.getItem('current_job');
+			console.log(ej);
+			if(ej != null) {
+				currentJob = ej;
+				updateJobInfo();
 			}
 		</script>
 	</body>

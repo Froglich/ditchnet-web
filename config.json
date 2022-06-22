@@ -7,7 +7,7 @@
 	"listen_client": "127.0.0.1",
 	"listen_port": 5566,
 	"file_storage_path": "/home/kim/ditchnet-storage",
-	"script_path": "./script.py",
 	"assets_path": "assets",
-	"max_concurrent_jobs": 10
+	"max_concurrent_jobs": 1,
+	"job_timeout_min": 3
 }
