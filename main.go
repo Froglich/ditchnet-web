@@ -139,10 +139,12 @@ func (dnj ditchNetJob) start() {
 		"--temp_dir=/min/temp_dir",
 		fmt.Sprintf("--model=%s", modelPath),
 	)
-	err := cmd.Run()
+	out, err := cmd.Output()
 	if err != nil {
 		log.Printf("job %s closed with error: '%v'\n", dnj, err)
 	}
+
+	log.Printf("job output: '%s", string(out))
 
 	_, err = os.Stat(dnj.getOutFilePath())
 	if err != nil {
