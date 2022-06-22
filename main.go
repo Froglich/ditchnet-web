@@ -125,12 +125,28 @@ func (dnj ditchNetJob) start() {
 		modelPath = "/min/modell/DitchNet_1m.h5"
 	}
 
-	cmd := exec.Command("python", ditchNetConfig.ScriptPath, dnj.getInFolderPath(), dnj.getOutFolderPath(), fmt.Sprintf("--temp_dir=%s", dnj.getTempFolderPath()), fmt.Sprintf("--model=%s", modelPath))
+	cmd := exec.Command(
+		"docker",
+		"run",
+		"-t",
+		"--gpus=all",
+		"-v", fmt.Sprintf("%s:/min/input", dnj.getInFolderPath()),
+		"-v", fmt.Sprintf("%s:/min/output", dnj.getOutFolderPath()),
+		"-v", fmt.Sprintf("%s:/min/temp_dir", dnj.getTempFolderPath()),
+		"python", "/min/modell/script.py",
+		"/min/input/",
+		"/min/output",
+		"--temp_dir=/min/temp_dir",
+		fmt.Sprintf("--model=%s", modelPath),
+	)
 	err := cmd.Run()
 	if err != nil {
-		dnj.setState(db, Error)
-		log.Printf("job '%s' failed: '%v'\n", dnj, err)
-		return
+		log.Printf("job %s closed with error: '%v'\n", dnj, err)
+	}
+
+	_, err = os.Stat(dnj.getOutFilePath())
+	if err != nil {
+		log.Printf("job %s failed, unable to stat outfile: '%v'\n", dnj, err)
 	}
 
 	dnj.setState(db, Complete)
