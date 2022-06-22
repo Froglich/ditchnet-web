@@ -25,6 +25,7 @@ const (
 	Processing uint = 1
 	Complete   uint = 2
 	Error      uint = 3
+	NotFound   uint = 4
 )
 
 var ditchNetConfig struct {
@@ -52,14 +53,14 @@ func (dns ditchNetState) toJSON() []byte {
 
 type ditchNetJob string
 
-func (dnj ditchNetJob) getState(db *sql.DB) (*uint, error) {
+func (dnj ditchNetJob) getState(db *sql.DB) uint {
 	row := db.QueryRow("SELECT state FROM jobs WHERE job_id = $1", dnj)
 	var state uint
 	if err := row.Scan(&state); err != nil {
-		return nil, err
+		return NotFound
 	}
 
-	return &state, nil
+	return state
 }
 
 func (dnj ditchNetJob) getPositionInQueue(db *sql.DB) (*uint, error) {
@@ -81,7 +82,7 @@ func (dnj ditchNetJob) getInFolderPath() string {
 }
 
 func (dnj ditchNetJob) getInFilePath() string {
-	return path.Join(dnj.getInFolderPath(), fmt.Sprintf("%s.tif", dnj))
+	return path.Join(dnj.getInFolderPath(), "target.tif")
 }
 
 func (dnj ditchNetJob) getOutFolderPath() string {
@@ -89,11 +90,49 @@ func (dnj ditchNetJob) getOutFolderPath() string {
 }
 
 func (dnj ditchNetJob) getOutFilePath() string {
-	return path.Join(dnj.getOutFolderPath(), fmt.Sprintf("%s.tif", dnj))
+	return path.Join(dnj.getOutFolderPath(), "target.tif")
 }
 
 func (dnj ditchNetJob) getTempFolderPath() string {
 	return path.Join(dnj.getFolder(), "temp")
+}
+
+func (dnj ditchNetJob) getOriginalFilename(db *sql.DB) string {
+	row := db.QueryRow("SELECT original_filename FROM jobs WHERE job_id = $1", dnj)
+	var fn string
+	if err := row.Scan(&fn); err != nil {
+		log.Printf("could not get original filename for job %s: '%v'\n", dnj, err)
+		return "target.tif"
+	}
+
+	return fn
+}
+
+func (dnj ditchNetJob) getStateAndMessage(db *sql.DB) (uint, string) {
+	state := dnj.getState(db)
+
+	var msg string
+
+	if state == InQueue {
+		pos, err := dnj.getPositionInQueue(db)
+		if err != nil {
+			log.Printf("could not position in queue for job %s: '%v'\n", dnj, err)
+			return InQueue, "position in queue is unknown"
+		}
+
+		msg = fmt.Sprintf("position in queue: %d", pos)
+	}
+
+	switch state {
+	case Processing:
+		msg = "processing"
+	case Complete:
+		msg = "complete"
+	default:
+		msg = "failed"
+	}
+
+	return state, msg
 }
 
 func (dnj ditchNetJob) setState(db *sql.DB, state uint) {
@@ -133,18 +172,19 @@ func (dnj ditchNetJob) start() {
 		"-v", fmt.Sprintf("%s:/min/input", dnj.getInFolderPath()),
 		"-v", fmt.Sprintf("%s:/min/output", dnj.getOutFolderPath()),
 		"-v", fmt.Sprintf("%s:/min/temp_dir", dnj.getTempFolderPath()),
+		"ditchnet",
 		"python", "/min/modell/script.py",
 		"/min/input/",
-		"/min/output",
-		"--temp_dir=/min/temp_dir",
+		"/min/output/",
+		"--temp_dir=/min/temp_dir/",
 		fmt.Sprintf("--model=%s", modelPath),
 	)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("job %s closed with error: '%v'\n", dnj, err)
 	}
 
-	log.Printf("job output: '%s", string(out))
+	log.Printf("job %s output: '%s", dnj, string(out))
 
 	_, err = os.Stat(dnj.getOutFilePath())
 	if err != nil {
@@ -180,7 +220,7 @@ func jobQueueRoutine() {
 	defer db.Close()
 
 	for true {
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 
 		if getProcessingCount(db) < ditchNetConfig.MaxConcurrentJobs {
 			job := getNextJob(db)
@@ -295,20 +335,6 @@ func newJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	/*if err != nil {
-		w.WriteHeader(http.StatusNotAcceptable)
-		fmt.Fprint(w, "unable to decode your image file")
-		log.Printf("unable to decode image: '%v'\n", err)
-		return
-	}
-
-	if img.Bounds().Max.X > 1000 || img.Bounds().Max.Y > 1000 {
-		w.WriteHeader(http.StatusNotAcceptable)
-		fmt.Fprint(w, "your image is too large, maximum dimensions are 1000x1000 pixels.")
-		log.Println("image to large")
-		return
-	}*/
-
 	err = os.MkdirAll(job.getInFolderPath(), 0755)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -351,6 +377,44 @@ func newJobHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, job)
 }
 
+func getJobStateHandler(w http.ResponseWriter, r *http.Request) {
+	db := getDBConnection()
+	defer db.Close()
+
+	var job ditchNetJob = ditchNetJob(mux.Vars(r)["job"])
+	state, msg := job.getStateAndMessage(db)
+
+	fmt.Fprintf(w, `{"state_id": %d, "message: "%s"}`, state, msg)
+}
+
+func getJobOutput(w http.ResponseWriter, r *http.Request) {
+	db := getDBConnection()
+	defer db.Close()
+
+	job := ditchNetJob(mux.Vars(r)["job"])
+
+	f, err := os.Open(job.getOutFilePath())
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("could not read job %s output file: '%v'\n", job, err)
+			return
+		}
+	}
+
+	w.Header().Set("Content-disposition", fmt.Sprintf("attachment; filename=\"%s\"", job.getOriginalFilename(db)))
+	_, err = io.Copy(w, f)
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("could not send file to client: '%v'\n", err)
+	}
+}
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	f, err := os.Open(path.Join(ditchNetConfig.AssetsPath, "index.html"))
 	if err != nil {
@@ -388,7 +452,8 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", indexHandler).Methods("GET")
 	r.HandleFunc("/job", newJobHandler).Methods("POST")
-	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}", nil).Methods("GET")
+	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}", getJobStateHandler).Methods("GET")
+	r.HandleFunc("/job/{id:\\w{8}-\\w{4}-\\w{4}-\\w{4}\\w{12}/download", getJobOutput).Methods("GET")
 	r.PathPrefix("/assets").Handler(http.StripPrefix("/assets", http.FileServer(http.Dir(path.Join(ditchNetConfig.AssetsPath, "assets")))))
 
 	go jobQueueRoutine()
