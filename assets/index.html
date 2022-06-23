@@ -48,6 +48,10 @@
 				animation: fade-in 1s;
 			}
 
+			a {
+				color: var(--fg-alt1);
+			}
+
 			#main-content {
 				position: relative;
 				width: 100%;
@@ -151,7 +155,7 @@
 			<form id="main-content" action="javascript:submitRaster()">
 				<div id="info-frame"></div>
 				<h2 style="margin-top: 0px">Upload raster</h2>
-				<p>Upload your own .tiff-file and have DitchNet find and classify all ditches.</p>
+				<p>Upload your own digital elevation model as GeoTIFF and DitchNet will map all ditches. File sizes are limited to 30 MB.</p>
 				
 				<label class="title" for="inFile">Pick a file</label>
 				<label class="filelbl" style="margin-bottom: 10px">
@@ -169,6 +173,18 @@
 					<input type="submit" id="btnSubmit" value="Go!" disabled>
 				</div>
 			</form>
+			<p>DitchNet is a deep neural network that was trained on ditch channels and airborne
+			laser scanning data. DitchNet consists of two models which are trained on two different
+			resolutions (0.5 m and 1 m). Make sure to select the model based on the resolution of
+			your digital elevation model.</p>
+ 
+			<p><a href="https://github.com/williamlidberg/Mapping-drainage-ditches-in-forested-landscapes-using-deep-learning-and-aerial-laser-scanning/tree/DitchNet-1-m-resolution" title="link to the source for the model">
+			The code and documentation for DitchNet are available here</a>
+ 
+			<p>For more info contact: <a href="mailto:William.lidberg@slu.se">William.lidberg@slu.se</a>
+
+			<p>The web app was created by Kim Lindgren, and the <a href="https://github.com/froglich/ditchnet-web" title="link to the source code for this webbsite">
+			source code is available on GitHub</a></p>
 		</main>
 
 		<script>
