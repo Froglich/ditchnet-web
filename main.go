@@ -157,6 +157,7 @@ func (dnj ditchNetJob) start() {
 	cmd := exec.Command(
 		"docker",
 		"run",
+		"--rm",
 		"-t",
 		"--gpus=all",
 		"-v", fmt.Sprintf("%s:/min/input", dnj.getInFolderPath()),
@@ -191,6 +192,8 @@ func (dnj ditchNetJob) start() {
 	_, err = os.Stat(dnj.getOutFilePath())
 	if err != nil {
 		log.Printf("job %s failed, unable to stat outfile: '%v'\n", dnj, err)
+		dnj.setState(db, Error)
+		return
 	}
 
 	dnj.setState(db, Complete)
