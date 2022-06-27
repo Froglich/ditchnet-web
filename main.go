@@ -157,7 +157,6 @@ func (dnj ditchNetJob) start() {
 	cmd := exec.Command(
 		"docker",
 		"run",
-		"--rm",
 		"-t",
 		"--gpus=all",
 		"-v", fmt.Sprintf("%s:/min/input", dnj.getInFolderPath()),
