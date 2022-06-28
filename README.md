@@ -31,8 +31,8 @@ To enable HTTPS set up DitchNet-web to allow connections from only *localhost* o
 ```
 server {
     server_name ditchnet.phloem.se;
-	listen 443 ssl;
-	client_max_body_size 32M;  //Limit request size to 32 megabytes
+    listen 443 ssl;
+    client_max_body_size 32M;  //Limit request size to 32 megabytes
 
     location / {
         proxy_pass http://localhost:5566;
@@ -44,8 +44,8 @@ server {
 
 //Forward HTTP to HTTPS
 server {
-	server_name ditchnet.phloem.se;
-	listen 80;
+    server_name ditchnet.phloem.se;
+    listen 80;
 
     if ($host = ditchnet.phloem.se) {
         return 301 https://$host$request_uri;
